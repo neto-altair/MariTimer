@@ -11,6 +11,7 @@ import qrcode from 'qrcode-terminal';
 
 import config from './config.js';
 import * as storage from './storage.js';
+import { sincronizarComPlanilha } from './sheetsSync.js';
 import {
   hojeKey,
   horaAtualHHMM,
@@ -45,6 +46,7 @@ async function registrarEntrada(responder, horaTexto) {
   const registroExistente = storage.getRegistroDoDia(dataKey) || {};
   registroExistente.entrada = hora;
   storage.salvarRegistroDoDia(dataKey, registroExistente);
+  await sincronizarComPlanilha(dataKey, registroExistente);
 
   await responder(`Entrada registrada as ${hora}.`);
 }
@@ -68,6 +70,7 @@ async function registrarSaida(responder, horaTexto) {
   const horasTrabalhadas = diferencaEmHoras(registro.entrada, hora);
   registro.horasTrabalhadas = horasTrabalhadas;
   storage.salvarRegistroDoDia(dataKey, registro);
+  await sincronizarComPlanilha(dataKey, registro);
 
   const horasEsperadas = config.horasPorDia;
   const diferenca = horasTrabalhadas - horasEsperadas;

@@ -34,6 +34,48 @@ do numero pessoal de quem vai mandar as mensagens. Para parear:
    precisa mais ficar envolvido — quem fica rodando o bot e o aparelho do
    passo abaixo (o M13).
 
+## Sincronizar com Google Sheets (validar e ter backup pelo PC)
+
+Os dados continuam salvos localmente no celular (`data/registros.json`), mas
+o bot tambem pode mandar cada registro para uma planilha do Google Sheets.
+Assim voce acessa e confere tudo pelo navegador no PC, e como a planilha fica
+no seu Google Drive, o backup ja vem junto.
+
+### Configurar a planilha
+
+1. Crie uma planilha nova em https://sheets.google.com.
+2. Va em **Extensoes > Apps Script**.
+3. Apague o conteudo padrao e cole o conteudo do arquivo
+   `google-apps-script/Code.gs` (esta na pasta do projeto).
+4. Troque a linha `const SEGREDO = 'TROQUE_POR_UMA_SENHA_SUA';` por uma senha
+   sua (qualquer texto, serve como um token simples pra ninguem mais
+   conseguir escrever na sua planilha).
+5. Clique em **Implantar > Nova implantacao**.
+6. Em "Tipo", escolha **App da Web**.
+7. Em "Quem pode acessar", escolha **Qualquer pessoa** (e necessario para o
+   bot conseguir chamar o link de fora do Google).
+8. Clique em Implantar, autorize as permissoes pedidas, e copie a **URL do
+   app da Web** gerada (algo como `https://script.google.com/macros/s/.../exec`).
+
+### Configurar o bot
+
+Edite o `config.json` do projeto e preencha:
+
+```json
+"googleSheets": {
+  "webhookUrl": "https://script.google.com/macros/s/SEU_ID_AQUI/exec",
+  "secret": "a-mesma-senha-que-voce-colocou-no-Code.gs"
+}
+```
+
+Reinicie o bot (`Ctrl+C` e `npm start` de novo). A partir dai, toda vez que
+alguem mandar `entrada` ou `saida`, uma linha na planilha "Registros" e
+criada ou atualizada automaticamente.
+
+Se quiser desativar essa sincronizacao depois, basta deixar `webhookUrl` e
+`secret` vazios de novo no `config.json` — o bot volta a funcionar so com o
+arquivo local, sem dar erro.
+
 ## Como rodar no Termux (Galaxy M13 ou outro Android)
 
 1. Instale o **Termux** pela F-Droid (https://f-droid.org/packages/com.termux/).
