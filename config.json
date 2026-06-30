@@ -1,0 +1,5 @@
+{
+  "horasPorDia": 8,
+  "diasUteis": [1, 2, 3, 4, 5],
+  "_comentario": "diasUteis: 0=domingo, 1=segunda ... 6=sabado. Mude horasPorDia se a jornada for diferente de 8h."
+}
