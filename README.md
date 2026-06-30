@@ -59,22 +59,61 @@ no seu Google Drive, o backup ja vem junto.
 
 ### Configurar o bot
 
-Edite o `config.json` do projeto e preencha:
+Copie o `.env.example` para um arquivo chamado `.env` e preencha:
 
-```json
-"googleSheets": {
-  "webhookUrl": "https://script.google.com/macros/s/SEU_ID_AQUI/exec",
-  "secret": "a-mesma-senha-que-voce-colocou-no-Code.gs"
-}
+```
+GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/SEU_ID_AQUI/exec
+GOOGLE_SHEETS_SECRET=a-mesma-senha-que-voce-colocou-no-Code.gs
 ```
 
 Reinicie o bot (`Ctrl+C` e `npm start` de novo). A partir dai, toda vez que
 alguem mandar `entrada` ou `saida`, uma linha na planilha "Registros" e
 criada ou atualizada automaticamente.
 
-Se quiser desativar essa sincronizacao depois, basta deixar `webhookUrl` e
-`secret` vazios de novo no `config.json` — o bot volta a funcionar so com o
-arquivo local, sem dar erro.
+Se quiser desativar essa sincronizacao depois, basta deixar as duas linhas
+do `.env` vazias — o bot volta a funcionar so com o arquivo local, sem dar
+erro.
+
+**O arquivo `.env` nunca deve ser enviado para o GitHub** (ja vem protegido
+no `.gitignore` deste projeto). Veja a secao abaixo.
+
+## Publicando o repositorio no GitHub com seguranca
+
+Dois tipos de informacao neste projeto nao podem ir para um repositorio
+publico (nem privado, idealmente):
+
+- **A pasta `data/`**: contem a sessao autenticada do WhatsApp
+  (`data/sessao`). Quem tiver acesso a esses arquivos consegue se passar
+  pelo seu bot no WhatsApp sem precisar escanear QR code de novo. Contém
+  também o `registros.json`, com os horarios.
+- **O arquivo `.env`**: contem a senha e a URL da planilha. Quem tiver isso
+  consegue escrever dados falsos na sua planilha.
+
+O `.gitignore` incluido no projeto ja exclui `data/`, `.env` e
+`node_modules/` automaticamente. Antes do primeiro `git push`, confirme que
+esses itens nao vao ser enviados:
+
+```
+git status
+```
+
+Se `data/` ou `.env` aparecerem na lista de arquivos a serem commitados, **pare**
+e confira se o `.gitignore` esta na raiz do projeto e se o nome dos arquivos
+bate exatamente.
+
+### Se voce ja deu push de algum segredo por engano
+
+Remover o arquivo depois nao basta — ele continua no historico do Git, e
+qualquer um pode ver commits antigos. Nesse caso, o caminho mais simples e:
+
+1. Trocar a senha do `Code.gs` na planilha e reimplantar (gera uma nova
+   URL de webhook).
+2. Apagar e recriar a pasta `data/sessao` no celular, rodar o bot de novo e
+   escanear o QR code outra vez (a sessao antiga fica invalidada).
+3. Se possivel, apagar o repositorio no GitHub e subir um novo, limpo, em
+   vez de tentar "limpar" o historico do antigo.
+
+Dessa forma os segredos antigos (que ja vazaram) perdem a validade.
 
 ## Como rodar no Termux (Galaxy M13 ou outro Android)
 

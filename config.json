@@ -1,9 +1,5 @@
 {
   "horasPorDia": 8,
   "diasUteis": [1, 2, 3, 4, 5],
-  "googleSheets": {
-    "webhookUrl": "https://script.google.com/macros/s/AKfycbxrDzeYPtRrUOGPwCT5gU4Q1VAj2JlZkBv_-eynhG6W6RoxTnQ0x9-hb7OpA4u80TiVJQ/exec",
-    "secret": "Vazzun-bigzi2-cyxzuk"
-  },
-  "_comentario": "diasUteis: 0=domingo, 1=segunda ... 6=sabado. googleSheets.webhookUrl e secret ficam vazios ate voce configurar a planilha (veja o README). Deixando vazio, a sincronizacao fica desativada e o bot funciona normalmente, so com o arquivo local."
+  "_comentario": "diasUteis: 0=domingo, 1=segunda ... 6=sabado. Os dados sensiveis (senha e URL da planilha do Google Sheets) NAO ficam aqui -- ficam no arquivo .env, que nao e versionado. Veja .env.example."
 }
