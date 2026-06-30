@@ -1,20 +1,20 @@
-const config = require('../config.json');
+import config from './config.js';
 
-function hojeKey(date = new Date()) {
+export function hojeKey(date = new Date()) {
   const ano = date.getFullYear();
   const mes = String(date.getMonth() + 1).padStart(2, '0');
   const dia = String(date.getDate()).padStart(2, '0');
   return `${ano}-${mes}-${dia}`;
 }
 
-function horaAtualHHMM(date = new Date()) {
+export function horaAtualHHMM(date = new Date()) {
   const h = String(date.getHours()).padStart(2, '0');
   const m = String(date.getMinutes()).padStart(2, '0');
   return `${h}:${m}`;
 }
 
 // valida e normaliza "8:5" -> "08:05", retorna null se invalido
-function normalizarHora(texto) {
+export function normalizarHora(texto) {
   const match = texto.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   const h = parseInt(match[1], 10);
@@ -24,7 +24,7 @@ function normalizarHora(texto) {
 }
 
 // diferenca em horas (decimal) entre duas strings HH:MM
-function diferencaEmHoras(horaInicio, horaFim) {
+export function diferencaEmHoras(horaInicio, horaFim) {
   const [h1, m1] = horaInicio.split(':').map(Number);
   const [h2, m2] = horaFim.split(':').map(Number);
   const minutosInicio = h1 * 60 + m1;
@@ -36,7 +36,7 @@ function diferencaEmHoras(horaInicio, horaFim) {
   return (minutosFim - minutosInicio) / 60;
 }
 
-function formatarHoras(horasDecimal) {
+export function formatarHoras(horasDecimal) {
   const sinal = horasDecimal < 0 ? '-' : '';
   const abs = Math.abs(horasDecimal);
   const h = Math.floor(abs);
@@ -44,15 +44,6 @@ function formatarHoras(horasDecimal) {
   return `${sinal}${h}h${String(m).padStart(2, '0')}min`;
 }
 
-function eDiaUtil(date = new Date()) {
+export function eDiaUtil(date = new Date()) {
   return config.diasUteis.includes(date.getDay());
 }
-
-module.exports = {
-  hojeKey,
-  horaAtualHHMM,
-  normalizarHora,
-  diferencaEmHoras,
-  formatarHoras,
-  eDiaUtil,
-};

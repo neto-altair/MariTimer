@@ -1,5 +1,9 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'registros.json');
@@ -13,7 +17,7 @@ function garantirArquivo() {
   }
 }
 
-function carregarTudo() {
+export function carregarTudo() {
   garantirArquivo();
   const conteudo = fs.readFileSync(DATA_FILE, 'utf-8');
   return JSON.parse(conteudo);
@@ -25,19 +29,13 @@ function salvarTudo(dados) {
 }
 
 // dataKey no formato YYYY-MM-DD
-function getRegistroDoDia(dataKey) {
+export function getRegistroDoDia(dataKey) {
   const dados = carregarTudo();
   return dados[dataKey] || null;
 }
 
-function salvarRegistroDoDia(dataKey, registro) {
+export function salvarRegistroDoDia(dataKey, registro) {
   const dados = carregarTudo();
   dados[dataKey] = registro;
   salvarTudo(dados);
 }
-
-module.exports = {
-  carregarTudo,
-  getRegistroDoDia,
-  salvarRegistroDoDia,
-};

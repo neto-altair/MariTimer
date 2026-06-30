@@ -1,49 +1,27 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
-const config = require('../config.json');
-const storage = require('./storage');
-const {
+import makeWASocket, {
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason,
+} from 'baileys';
+import { Boom } from '@hapi/boom';
+import P from 'pino';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import qrcode from 'qrcode-terminal';
+
+import config from './config.js';
+import * as storage from './storage.js';
+import {
   hojeKey,
   horaAtualHHMM,
   normalizarHora,
   diferencaEmHoras,
   formatarHoras,
-  eDiaUtil,
-} = require('./timeUtils');
+} from './timeUtils.js';
 
-const client = new Client({
-  authStrategy: new LocalAuth(),
-});
-
-client.on('qr', (qr) => {
-  console.log('Escaneie este QR code com o WhatsApp (Aparelhos conectados):');
-  qrcode.generate(qr, { small: true });
-});
-
-client.on('ready', () => {
-  console.log('Bot conectado e pronto.');
-});
-
-client.on('message', async (msg) => {
-  const texto = msg.body.trim().toLowerCase();
-  const partes = texto.split(/\s+/);
-  const comando = partes[0];
-
-  try {
-    if (comando === 'entrada') {
-      await registrarEntrada(msg, partes[1]);
-    } else if (comando === 'saida' || comando === 'saída') {
-      await registrarSaida(msg, partes[1]);
-    } else if (comando === 'saldo') {
-      await mostrarSaldo(msg);
-    } else if (comando === 'ajuda' || comando === 'help') {
-      await msg.reply(textoAjuda());
-    }
-  } catch (erro) {
-    console.error('Erro ao processar mensagem:', erro);
-    await msg.reply('Deu um erro aqui ao processar isso. Tenta de novo.');
-  }
-});
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PASTA_SESSAO = path.join(__dirname, '..', 'data', 'sessao');
 
 function textoAjuda() {
   return [
@@ -55,12 +33,12 @@ function textoAjuda() {
   ].join('\n');
 }
 
-async function registrarEntrada(msg, horaTexto) {
+async function registrarEntrada(responder, horaTexto) {
   const dataKey = hojeKey();
   const hora = horaTexto ? normalizarHora(horaTexto) : horaAtualHHMM();
 
   if (horaTexto && !hora) {
-    await msg.reply('Hora invalida. Use o formato HH:MM, por exemplo: entrada 08:00');
+    await responder('Hora invalida. Use o formato HH:MM, por exemplo: entrada 08:00');
     return;
   }
 
@@ -68,21 +46,21 @@ async function registrarEntrada(msg, horaTexto) {
   registroExistente.entrada = hora;
   storage.salvarRegistroDoDia(dataKey, registroExistente);
 
-  await msg.reply(`Entrada registrada as ${hora}.`);
+  await responder(`Entrada registrada as ${hora}.`);
 }
 
-async function registrarSaida(msg, horaTexto) {
+async function registrarSaida(responder, horaTexto) {
   const dataKey = hojeKey();
   const hora = horaTexto ? normalizarHora(horaTexto) : horaAtualHHMM();
 
   if (horaTexto && !hora) {
-    await msg.reply('Hora invalida. Use o formato HH:MM, por exemplo: saida 17:00');
+    await responder('Hora invalida. Use o formato HH:MM, por exemplo: saida 17:00');
     return;
   }
 
   const registro = storage.getRegistroDoDia(dataKey);
   if (!registro || !registro.entrada) {
-    await msg.reply('Nao encontrei a entrada de hoje. Manda "entrada HH:MM" primeiro.');
+    await responder('Nao encontrei a entrada de hoje. Manda "entrada HH:MM" primeiro.');
     return;
   }
 
@@ -103,12 +81,12 @@ async function registrarSaida(msg, horaTexto) {
     resultado = `Faltando: ${formatarHoras(Math.abs(diferenca))}.`;
   }
 
-  await msg.reply(
+  await responder(
     `Saida registrada as ${hora}.\nTrabalhado hoje: ${formatarHoras(horasTrabalhadas)}.\n${resultado}`
   );
 }
 
-async function mostrarSaldo(msg) {
+async function mostrarSaldo(responder) {
   const dados = storage.carregarTudo();
   const hoje = new Date();
   const mesAtual = hoje.getMonth();
@@ -127,7 +105,7 @@ async function mostrarSaldo(msg) {
   }
 
   if (diasContabilizados === 0) {
-    await msg.reply('Ainda nao ha dias fechados (com entrada e saida) registrados este mes.');
+    await responder('Ainda nao ha dias fechados (com entrada e saida) registrados este mes.');
     return;
   }
 
@@ -135,7 +113,80 @@ async function mostrarSaldo(msg) {
     ? `Saldo positivo de ${formatarHoras(saldoTotal)}.`
     : `Saldo negativo (faltando) de ${formatarHoras(Math.abs(saldoTotal))}.`;
 
-  await msg.reply(`Saldo do mes (${diasContabilizados} dia(s) fechados):\n${status}`);
+  await responder(`Saldo do mes (${diasContabilizados} dia(s) fechados):\n${status}`);
 }
 
-client.initialize();
+async function iniciar() {
+  const { state, saveCreds } = await useMultiFileAuthState(PASTA_SESSAO);
+  const { version } = await fetchLatestBaileysVersion();
+
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: P({ level: 'silent' }),
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      console.log('Escaneie este QR code com o WhatsApp (Aparelhos conectados):');
+      qrcode.generate(qr, { small: true });
+    }
+
+    if (connection === 'close') {
+      const codigo = lastDisconnect?.error instanceof Boom
+        ? lastDisconnect.error.output?.statusCode
+        : null;
+      const deveReconectar = codigo !== DisconnectReason.loggedOut;
+      console.log(
+        'Conexao fechada.',
+        deveReconectar
+          ? 'Tentando reconectar...'
+          : 'Sessao encerrada. Apague a pasta data/sessao e rode de novo para reparear.'
+      );
+      if (deveReconectar) {
+        iniciar();
+      }
+    } else if (connection === 'open') {
+      console.log('Bot conectado e pronto.');
+    }
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+
+    const texto = (
+      msg.message.conversation
+      || msg.message.extendedTextMessage?.text
+      || ''
+    ).trim();
+    if (!texto) return;
+
+    const jid = msg.key.remoteJid;
+    const responder = (resposta) => sock.sendMessage(jid, { text: resposta });
+
+    const partes = texto.toLowerCase().split(/\s+/);
+    const comando = partes[0];
+
+    try {
+      if (comando === 'entrada') {
+        await registrarEntrada(responder, partes[1]);
+      } else if (comando === 'saida' || comando === 'saída') {
+        await registrarSaida(responder, partes[1]);
+      } else if (comando === 'saldo') {
+        await mostrarSaldo(responder);
+      } else if (comando === 'ajuda' || comando === 'help') {
+        await responder(textoAjuda());
+      }
+    } catch (erro) {
+      console.error('Erro ao processar mensagem:', erro);
+      await responder('Deu um erro aqui ao processar isso. Tenta de novo.');
+    }
+  });
+}
+
+iniciar();
