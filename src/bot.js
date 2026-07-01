@@ -11,7 +11,7 @@ import qrcode from 'qrcode-terminal';
 
 import config from './config.js';
 import * as storage from './storage.js';
-import { sincronizarComPlanilha } from './sheetsSync.js';
+import { gerarCsv } from './exportar.js';
 import {
   hojeKey,
   horaAtualHHMM,
@@ -31,6 +31,7 @@ function textoAjuda() {
     `*saida* ou *saida 12:00* - registra uma saida`,
     `A jornada tem ${config.batidasPorDia} batidas por dia. Exemplo com almoco: entrada (8h), saida (12h), entrada (13h), saida (17h).`,
     '*saldo* - mostra o saldo acumulado do mes (extra ou em falta)',
+    '*exportar* - manda um arquivo CSV com todos os registros, pra abrir no PC',
     '*ajuda* - mostra esta mensagem',
   ].join('\n');
 }
@@ -69,7 +70,6 @@ async function registrarBatida(responder, tipo, horaTexto) {
   registro.batidas.push({ tipo, hora });
   registro.horasTrabalhadas = calcularTotalTrabalhado(registro.batidas);
   storage.salvarRegistroDoDia(dataKey, registro);
-  await sincronizarComPlanilha(dataKey, registro);
 
   const numeroBatida = registro.batidas.length;
   const rotulo = tipo === 'entrada' ? 'Entrada' : 'Saida';
@@ -127,6 +127,19 @@ async function mostrarSaldo(responder) {
     : `Saldo negativo (faltando) de ${formatarHoras(Math.abs(saldoTotal))}.`;
 
   await responder(`Saldo do mes (${diasContabilizados} dia(s) fechados):\n${status}`);
+}
+
+async function exportarCsv(sock, jid) {
+  const csv = gerarCsv();
+  // BOM no inicio ajuda o Excel a reconhecer acentuacao corretamente
+  const conteudo = Buffer.from('\uFEFF' + csv, 'utf-8');
+  const nomeArquivo = `ponto-${hojeKey()}.csv`;
+
+  await sock.sendMessage(jid, {
+    document: conteudo,
+    fileName: nomeArquivo,
+    mimetype: 'text/csv',
+  });
 }
 
 async function iniciar() {
@@ -192,6 +205,8 @@ async function iniciar() {
         await registrarBatida(responder, 'saida', partes[1]);
       } else if (comando === 'saldo') {
         await mostrarSaldo(responder);
+      } else if (comando === 'exportar') {
+        await exportarCsv(sock, jid);
       } else if (comando === 'ajuda' || comando === 'help') {
         await responder(textoAjuda());
       }
