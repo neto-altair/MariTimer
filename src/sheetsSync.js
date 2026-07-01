@@ -42,7 +42,7 @@ async function chamarApi(clienteAutenticado, metodo, caminho, corpo) {
 // Sheets (sem Apps Script no meio). Se as credenciais nao estiverem
 // configuradas, nao faz nada. Falha aqui nunca deve quebrar o bot: os dados
 // ja estao salvos localmente antes dessa funcao ser chamada.
-export async function sincronizarComPlanilha(dataKey, registro) {
+export async function sincronizarComPlanilha(dataKey, registro, tentativa = 1) {
   const clienteAutenticado = obterClient();
   const { sheetId } = config.googleSheets;
   if (!clienteAutenticado || !sheetId) return;
@@ -102,6 +102,12 @@ export async function sincronizarComPlanilha(dataKey, registro) {
       );
     }
   } catch (erro) {
+    // instabilidade de rede acontece, especialmente em conexao de celular.
+    // tenta mais uma vez antes de desistir e so entao logar como falha.
+    if (tentativa < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return sincronizarComPlanilha(dataKey, registro, tentativa + 1);
+    }
     console.error('Falha ao sincronizar com a planilha (dado ja esta salvo localmente):', erro.message);
   }
 }
