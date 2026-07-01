@@ -13,10 +13,17 @@ export function horaAtualHHMM(date = new Date()) {
   return `${h}:${m}`;
 }
 
-// valida e normaliza "8:5" -> "08:05", retorna null se invalido
+// valida e normaliza hora em dois formatos: "8:5" -> "08:05" ou "0805" -> "08:05"
+// retorna null se invalido
 export function normalizarHora(texto) {
-  const match = texto.match(/^(\d{1,2}):(\d{2})$/);
+  const valor = texto.trim();
+
+  const comDoisPontos = valor.match(/^(\d{1,2}):(\d{2})$/);
+  const somenteNumeros = valor.match(/^(\d{1,2})(\d{2})$/);
+  const match = comDoisPontos || somenteNumeros;
+
   if (!match) return null;
+
   const h = parseInt(match[1], 10);
   const m = parseInt(match[2], 10);
   if (h < 0 || h > 23 || m < 0 || m > 59) return null;
