@@ -37,45 +37,64 @@ do numero pessoal de quem vai mandar as mensagens. Para parear:
 ## Sincronizar com Google Sheets (validar e ter backup pelo PC)
 
 Os dados continuam salvos localmente no celular (`data/registros.json`), mas
-o bot tambem pode mandar cada registro para uma planilha do Google Sheets.
-Assim voce acessa e confere tudo pelo navegador no PC, e como a planilha fica
-no seu Google Drive, o backup ja vem junto.
+o bot tambem manda cada registro direto para uma planilha do Google Sheets,
+usando a API oficial do Google (sem passar por Apps Script). Assim voce
+acessa e confere tudo pelo navegador no PC, e como a planilha fica no seu
+Google Drive, o backup ja vem junto.
 
-### Configurar a planilha
+### Criar a conta de servico (Service Account)
 
-1. Crie uma planilha nova em https://sheets.google.com.
-2. Va em **Extensoes > Apps Script**.
-3. Apague o conteudo padrao e cole o conteudo do arquivo
-   `google-apps-script/Code.gs` (esta na pasta do projeto).
-4. Troque a linha `const SEGREDO = 'TROQUE_POR_UMA_SENHA_SUA';` por uma senha
-   sua (qualquer texto, serve como um token simples pra ninguem mais
-   conseguir escrever na sua planilha).
-5. Clique em **Implantar > Nova implantacao**.
-6. Em "Tipo", escolha **App da Web**.
-7. Em "Quem pode acessar", escolha **Qualquer pessoa** (e necessario para o
-   bot conseguir chamar o link de fora do Google).
-8. Clique em Implantar, autorize as permissoes pedidas, e copie a **URL do
-   app da Web** gerada (algo como `https://script.google.com/macros/s/.../exec`).
+Isso e feito uma unica vez.
+
+1. Acesse https://console.cloud.google.com e crie um projeto novo (ou use
+   um que ja tenha).
+2. No menu, va em **APIs e servicos > Biblioteca**, procure por
+   **Google Sheets API** e clique em **Ativar**.
+3. Va em **APIs e servicos > Credenciais > Criar credenciais > Conta de
+   servico**. De um nome qualquer (ex: `ponto-bot`) e conclua.
+4. Na lista de contas de servico, clique na que voce criou, va na aba
+   **Chaves > Adicionar chave > Criar nova chave**, escolha **JSON** e
+   baixe o arquivo.
+5. Abra esse arquivo JSON baixado. Voce vai usar dois campos dele:
+   `client_email` e `private_key`.
+
+### Compartilhar a planilha com a conta de servico
+
+1. Crie uma planilha nova em https://sheets.google.com (pode deixar em
+   branco, o bot cria o cabecalho sozinho).
+2. Clique em **Compartilhar**, cole o `client_email` do arquivo JSON (algo
+   como `ponto-bot@seu-projeto.iam.gserviceaccount.com`), e de permissao de
+   **Editor**.
+3. Copie o **ID da planilha**: e o trecho da URL entre `/d/` e `/edit`.
+   Exemplo: em `https://docs.google.com/spreadsheets/d/1AbCdEfGhIj/edit`,
+   o ID e `1AbCdEfGhIj`.
 
 ### Configurar o bot
 
 Copie o `.env.example` para um arquivo chamado `.env` e preencha:
 
 ```
-GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/SEU_ID_AQUI/exec
-GOOGLE_SHEETS_SECRET=a-mesma-senha-que-voce-colocou-no-Code.gs
+GOOGLE_SHEETS_ID=1AbCdEfGhIj
+GOOGLE_SERVICE_ACCOUNT_EMAIL=ponto-bot@seu-projeto.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_KEY=-----BEGIN PRIVATE KEY-----\nMIIEvQIB...\n-----END PRIVATE KEY-----\n
 ```
+
+O valor de `GOOGLE_SERVICE_ACCOUNT_KEY` e o campo `private_key` do JSON
+baixado — copie exatamente como esta la (numa linha so, com os `\n`
+literais mesmo, sem quebrar linha de verdade).
 
 Reinicie o bot (`Ctrl+C` e `npm start` de novo). A partir dai, toda vez que
 alguem mandar `entrada` ou `saida`, uma linha na planilha "Registros" e
 criada ou atualizada automaticamente.
 
-Se quiser desativar essa sincronizacao depois, basta deixar as duas linhas
+Se quiser desativar essa sincronizacao depois, basta deixar as tres linhas
 do `.env` vazias — o bot volta a funcionar so com o arquivo local, sem dar
 erro.
 
-**O arquivo `.env` nunca deve ser enviado para o GitHub** (ja vem protegido
-no `.gitignore` deste projeto). Veja a secao abaixo.
+**O arquivo `.env` (e o JSON da conta de servico) nunca devem ser enviados
+para o GitHub** (o `.env` ja vem protegido no `.gitignore` deste projeto —
+so tome cuidado pra nao commitar o JSON baixado tambem). Veja a secao
+abaixo.
 
 ## Publicando o repositorio no GitHub com seguranca
 
@@ -106,8 +125,8 @@ bate exatamente.
 Remover o arquivo depois nao basta — ele continua no historico do Git, e
 qualquer um pode ver commits antigos. Nesse caso, o caminho mais simples e:
 
-1. Trocar a senha do `Code.gs` na planilha e reimplantar (gera uma nova
-   URL de webhook).
+1. Gerar uma nova chave para a conta de servico no Google Cloud Console
+   (aba **Chaves**) e apagar a antiga, invalidando a que vazou.
 2. Apagar e recriar a pasta `data/sessao` no celular, rodar o bot de novo e
    escanear o QR code outra vez (a sessao antiga fica invalidada).
 3. Se possivel, apagar o repositorio no GitHub e subir um novo, limpo, em
