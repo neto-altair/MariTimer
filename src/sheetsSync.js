@@ -1,51 +1,129 @@
-import { JWT } from 'google-auth-library';
+import https from 'https';
+import crypto from 'crypto';
 import config from './config.js';
+
+// Este modulo fala com a API do Google Sheets usando so os modulos nativos
+// 'https' e 'crypto' do Node, sem usar fetch. Isso evita um bug conhecido
+// de "Premature close" que acontece com fetch/undici em alguns ambientes
+// (como o Termux) ao falar com os servidores do Google.
 
 const NOME_ABA = 'Registros';
 const CABECALHO = ['Data', 'Batidas', 'Horas trabalhadas', 'Esperado', 'Diferenca'];
 
-let client = null;
+let tokenCache = null; // { token, expiraEm }
 
-function obterClient() {
-  const { email, privateKey } = config.googleSheets;
-  if (!email || !privateKey) return null;
-  if (!client) {
-    client = new JWT({
-      email,
-      key: privateKey,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-  }
-  return client;
+function base64Url(buffer) {
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
-async function chamarApi(clienteAutenticado, metodo, caminho, corpo) {
-  const { token } = await clienteAutenticado.getAccessToken();
-  const resposta = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${caminho}`, {
+function criarJwtAssinado(email, privateKey) {
+  const agora = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: email,
+    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: agora,
+    exp: agora + 3600,
+  };
+
+  const headerCodificado = base64Url(Buffer.from(JSON.stringify(header)));
+  const payloadCodificado = base64Url(Buffer.from(JSON.stringify(payload)));
+  const dadosParaAssinar = `${headerCodificado}.${payloadCodificado}`;
+
+  const assinador = crypto.createSign('RSA-SHA256');
+  assinador.update(dadosParaAssinar);
+  assinador.end();
+  const assinatura = assinador.sign(privateKey);
+
+  return `${dadosParaAssinar}.${base64Url(assinatura)}`;
+}
+
+function requisicaoHttps(opcoes, corpo) {
+  return new Promise((resolve, reject) => {
+    const requisicao = https.request(opcoes, (resposta) => {
+      let dados = '';
+      resposta.on('data', (pedaco) => { dados += pedaco; });
+      resposta.on('end', () => resolve({ status: resposta.statusCode, corpo: dados }));
+    });
+    requisicao.on('error', reject);
+    if (corpo) requisicao.write(corpo);
+    requisicao.end();
+  });
+}
+
+async function obterTokenDeAcesso() {
+  const { email, privateKey } = config.googleSheets;
+
+  if (tokenCache && tokenCache.expiraEm > Date.now() + 30000) {
+    return tokenCache.token;
+  }
+
+  const jwt = criarJwtAssinado(email, privateKey);
+  const corpo = `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${jwt}`;
+
+  const resposta = await requisicaoHttps({
+    hostname: 'oauth2.googleapis.com',
+    path: '/token',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Length': Buffer.byteLength(corpo),
+    },
+  }, corpo);
+
+  let json;
+  try {
+    json = JSON.parse(resposta.corpo);
+  } catch {
+    throw new Error(`Resposta invalida ao pedir token (status ${resposta.status}): ${resposta.corpo.slice(0, 200)}`);
+  }
+
+  if (!json.access_token) {
+    throw new Error(`Falha ao obter token (status ${resposta.status}): ${resposta.corpo}`);
+  }
+
+  tokenCache = {
+    token: json.access_token,
+    expiraEm: Date.now() + (json.expires_in || 3600) * 1000,
+  };
+
+  return tokenCache.token;
+}
+
+async function chamarApi(metodo, caminho, corpoObjeto) {
+  const token = await obterTokenDeAcesso();
+  const corpo = corpoObjeto ? JSON.stringify(corpoObjeto) : null;
+
+  const resposta = await requisicaoHttps({
+    hostname: 'sheets.googleapis.com',
+    path: `/v4/spreadsheets/${caminho}`,
     method: metodo,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...(corpo ? { 'Content-Length': Buffer.byteLength(corpo) } : {}),
     },
-    body: corpo ? JSON.stringify(corpo) : undefined,
-  });
+  }, corpo);
 
-  if (!resposta.ok) {
-    const texto = await resposta.text();
-    throw new Error(`Sheets API respondeu ${resposta.status}: ${texto}`);
+  if (resposta.status < 200 || resposta.status >= 300) {
+    throw new Error(`Sheets API respondeu ${resposta.status}: ${resposta.corpo}`);
   }
 
-  return resposta.json();
+  return JSON.parse(resposta.corpo);
 }
 
 // Manda o registro do dia direto para a planilha via API oficial do Google
-// Sheets (sem Apps Script no meio). Se as credenciais nao estiverem
-// configuradas, nao faz nada. Falha aqui nunca deve quebrar o bot: os dados
-// ja estao salvos localmente antes dessa funcao ser chamada.
+// Sheets. Se as credenciais nao estiverem configuradas, nao faz nada. Falha
+// aqui nunca deve quebrar o bot: os dados ja estao salvos localmente antes
+// dessa funcao ser chamada.
 export async function sincronizarComPlanilha(dataKey, registro, tentativa = 1) {
-  const clienteAutenticado = obterClient();
-  const { sheetId } = config.googleSheets;
-  if (!clienteAutenticado || !sheetId) return;
+  const { sheetId, email, privateKey } = config.googleSheets;
+  if (!sheetId || !email || !privateKey) return;
 
   try {
     const batidas = registro.batidas || [];
@@ -61,16 +139,11 @@ export async function sincronizarComPlanilha(dataKey, registro, tentativa = 1) {
       horasTrabalhadas !== null ? (horasTrabalhadas - config.horasPorDia).toFixed(2) : '',
     ];
 
-    const leitura = await chamarApi(
-      clienteAutenticado,
-      'GET',
-      `${sheetId}/values/${encodeURIComponent(`${NOME_ABA}!A:A`)}`
-    );
+    const leitura = await chamarApi('GET', `${sheetId}/values/${encodeURIComponent(`${NOME_ABA}!A:A`)}`);
     let valoresColunaA = leitura.values || [];
 
     if (valoresColunaA.length === 0) {
       await chamarApi(
-        clienteAutenticado,
         'PUT',
         `${sheetId}/values/${encodeURIComponent(`${NOME_ABA}!A1`)}?valueInputOption=RAW`,
         { values: [CABECALHO] }
@@ -81,29 +154,25 @@ export async function sincronizarComPlanilha(dataKey, registro, tentativa = 1) {
     let linhaEncontrada = -1;
     for (let i = 1; i < valoresColunaA.length; i++) {
       if (valoresColunaA[i][0] === dataKey) {
-        linhaEncontrada = i + 1; // planilha comeca em 1, nao em 0
+        linhaEncontrada = i + 1;
         break;
       }
     }
 
     if (linhaEncontrada > 0) {
       await chamarApi(
-        clienteAutenticado,
         'PUT',
         `${sheetId}/values/${encodeURIComponent(`${NOME_ABA}!A${linhaEncontrada}:E${linhaEncontrada}`)}?valueInputOption=RAW`,
         { values: [linha] }
       );
     } else {
       await chamarApi(
-        clienteAutenticado,
         'POST',
         `${sheetId}/values/${encodeURIComponent(`${NOME_ABA}!A:E`)}:append?valueInputOption=RAW`,
         { values: [linha] }
       );
     }
   } catch (erro) {
-    // instabilidade de rede acontece, especialmente em conexao de celular.
-    // tenta mais uma vez antes de desistir e so entao logar como falha.
     if (tentativa < 2) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       return sincronizarComPlanilha(dataKey, registro, tentativa + 1);
