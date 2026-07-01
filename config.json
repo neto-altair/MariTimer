@@ -1,5 +1,6 @@
 {
   "horasPorDia": 8,
   "diasUteis": [1, 2, 3, 4, 5],
-  "_comentario": "diasUteis: 0=domingo, 1=segunda ... 6=sabado. Os dados sensiveis (senha e URL da planilha do Google Sheets) NAO ficam aqui -- ficam no arquivo .env, que nao e versionado. Veja .env.example."
+  "batidasPorDia": 4,
+  "_comentario": "diasUteis: 0=domingo, 1=segunda ... 6=sabado. batidasPorDia=4 significa entrada, saida (almoco), entrada (volta), saida (final). Se nao tiver intervalo de almoco, mude para 2. Os dados sensiveis (senha e URL da planilha do Google Sheets) ficam no .env, nao aqui."
 }

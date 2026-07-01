@@ -27,66 +27,74 @@ const PASTA_SESSAO = path.join(__dirname, '..', 'data', 'sessao');
 function textoAjuda() {
   return [
     'Comandos disponiveis:',
-    '*entrada* ou *entrada 08:00* - registra a entrada (usa o horario informado ou o horario atual)',
-    '*saida* ou *saida 17:00* - registra a saida e calcula o saldo do dia',
+    `*entrada* ou *entrada 08:00* - registra uma entrada (usa o horario atual ou o informado)`,
+    `*saida* ou *saida 12:00* - registra uma saida`,
+    `A jornada tem ${config.batidasPorDia} batidas por dia. Exemplo com almoco: entrada (8h), saida (12h), entrada (13h), saida (17h).`,
     '*saldo* - mostra o saldo acumulado do mes (extra ou em falta)',
     '*ajuda* - mostra esta mensagem',
   ].join('\n');
 }
 
-async function registrarEntrada(responder, horaTexto) {
-  const dataKey = hojeKey();
-  const hora = horaTexto ? normalizarHora(horaTexto) : horaAtualHHMM();
-
-  if (horaTexto && !hora) {
-    await responder('Hora invalida. Use o formato HH:MM, por exemplo: entrada 08:00');
-    return;
+function calcularTotalTrabalhado(batidas) {
+  let total = 0;
+  for (let i = 0; i + 1 < batidas.length; i += 2) {
+    total += diferencaEmHoras(batidas[i].hora, batidas[i + 1].hora);
   }
-
-  const registroExistente = storage.getRegistroDoDia(dataKey) || {};
-  registroExistente.entrada = hora;
-  storage.salvarRegistroDoDia(dataKey, registroExistente);
-  await sincronizarComPlanilha(dataKey, registroExistente);
-
-  await responder(`Entrada registrada as ${hora}.`);
+  return total;
 }
 
-async function registrarSaida(responder, horaTexto) {
+async function registrarBatida(responder, tipo, horaTexto) {
   const dataKey = hojeKey();
   const hora = horaTexto ? normalizarHora(horaTexto) : horaAtualHHMM();
 
   if (horaTexto && !hora) {
-    await responder('Hora invalida. Use o formato HH:MM, por exemplo: saida 17:00');
+    await responder(`Hora invalida. Use o formato HH:MM, por exemplo: ${tipo} 08:00`);
     return;
   }
 
-  const registro = storage.getRegistroDoDia(dataKey);
-  if (!registro || !registro.entrada) {
-    await responder('Nao encontrei a entrada de hoje. Manda "entrada HH:MM" primeiro.');
+  const registro = storage.getRegistroDoDia(dataKey) || { batidas: [] };
+  if (!registro.batidas) registro.batidas = [];
+
+  const ultimaBatida = registro.batidas[registro.batidas.length - 1];
+
+  if (tipo === 'entrada' && ultimaBatida && ultimaBatida.tipo === 'entrada') {
+    await responder('Voce ja bateu entrada e ainda nao bateu saida. Manda "saida" primeiro.');
+    return;
+  }
+  if (tipo === 'saida' && (!ultimaBatida || ultimaBatida.tipo === 'saida')) {
+    await responder('Nao tem entrada em aberto. Manda "entrada" primeiro.');
     return;
   }
 
-  registro.saida = hora;
-  const horasTrabalhadas = diferencaEmHoras(registro.entrada, hora);
-  registro.horasTrabalhadas = horasTrabalhadas;
+  registro.batidas.push({ tipo, hora });
+  registro.horasTrabalhadas = calcularTotalTrabalhado(registro.batidas);
   storage.salvarRegistroDoDia(dataKey, registro);
   await sincronizarComPlanilha(dataKey, registro);
 
-  const horasEsperadas = config.horasPorDia;
-  const diferenca = horasTrabalhadas - horasEsperadas;
+  const numeroBatida = registro.batidas.length;
+  const rotulo = tipo === 'entrada' ? 'Entrada' : 'Saida';
+  let mensagem = `${rotulo} #${numeroBatida} registrada as ${hora}.`;
 
-  let resultado;
-  if (Math.abs(diferenca) < 0.05) {
-    resultado = 'Bateu exatamente a jornada do dia.';
-  } else if (diferenca > 0) {
-    resultado = `Hora extra: ${formatarHoras(diferenca)}.`;
-  } else {
-    resultado = `Faltando: ${formatarHoras(Math.abs(diferenca))}.`;
+  const par = numeroBatida % 2 === 0;
+  const diaCompleto = numeroBatida === config.batidasPorDia;
+
+  if (par && diaCompleto) {
+    const horasEsperadas = config.horasPorDia;
+    const diferenca = registro.horasTrabalhadas - horasEsperadas;
+    let resultado;
+    if (Math.abs(diferenca) < 0.05) {
+      resultado = 'Bateu exatamente a jornada do dia.';
+    } else if (diferenca > 0) {
+      resultado = `Hora extra: ${formatarHoras(diferenca)}.`;
+    } else {
+      resultado = `Faltando: ${formatarHoras(Math.abs(diferenca))}.`;
+    }
+    mensagem += `\nTotal trabalhado hoje: ${formatarHoras(registro.horasTrabalhadas)}.\n${resultado}`;
+  } else if (par) {
+    mensagem += '\nPausa registrada. Manda "entrada" quando voltar.';
   }
 
-  await responder(
-    `Saida registrada as ${hora}.\nTrabalhado hoje: ${formatarHoras(horasTrabalhadas)}.\n${resultado}`
-  );
+  await responder(mensagem);
 }
 
 async function mostrarSaldo(responder) {
@@ -101,6 +109,8 @@ async function mostrarSaldo(responder) {
   for (const [dataKey, registro] of Object.entries(dados)) {
     const [ano, mes] = dataKey.split('-').map(Number);
     if (ano !== anoAtual || mes - 1 !== mesAtual) continue;
+    const batidas = registro.batidas || [];
+    if (batidas.length < config.batidasPorDia) continue;
     if (typeof registro.horasTrabalhadas !== 'number') continue;
 
     saldoTotal += registro.horasTrabalhadas - config.horasPorDia;
@@ -108,7 +118,7 @@ async function mostrarSaldo(responder) {
   }
 
   if (diasContabilizados === 0) {
-    await responder('Ainda nao ha dias fechados (com entrada e saida) registrados este mes.');
+    await responder('Ainda nao ha dias fechados (com todas as batidas do dia) registrados este mes.');
     return;
   }
 
@@ -177,9 +187,9 @@ async function iniciar() {
 
     try {
       if (comando === 'entrada') {
-        await registrarEntrada(responder, partes[1]);
+        await registrarBatida(responder, 'entrada', partes[1]);
       } else if (comando === 'saida' || comando === 'saída') {
-        await registrarSaida(responder, partes[1]);
+        await registrarBatida(responder, 'saida', partes[1]);
       } else if (comando === 'saldo') {
         await mostrarSaldo(responder);
       } else if (comando === 'ajuda' || comando === 'help') {

@@ -8,6 +8,7 @@ export async function sincronizarComPlanilha(dataKey, registro) {
   const { webhookUrl, secret } = config.googleSheets || {};
   if (!webhookUrl || !secret) return;
 
+  const batidas = registro.batidas || [];
   const horasTrabalhadas = typeof registro.horasTrabalhadas === 'number'
     ? registro.horasTrabalhadas
     : null;
@@ -15,8 +16,7 @@ export async function sincronizarComPlanilha(dataKey, registro) {
   const payload = {
     secret,
     data: dataKey,
-    entrada: registro.entrada || '',
-    saida: registro.saida || '',
+    batidas: batidas.map((b) => `${b.tipo === 'entrada' ? 'E' : 'S'} ${b.hora}`).join('  |  '),
     horasTrabalhadas: horasTrabalhadas !== null ? horasTrabalhadas.toFixed(2) : '',
     esperado: config.horasPorDia,
     diferenca: horasTrabalhadas !== null
@@ -25,11 +25,15 @@ export async function sincronizarComPlanilha(dataKey, registro) {
   };
 
   try {
-    await fetch(webhookUrl, {
+    const resposta = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    const textoResposta = await resposta.text();
+    if (textoResposta.trim() !== 'ok') {
+      console.error('Planilha respondeu algo inesperado:', textoResposta);
+    }
   } catch (erro) {
     console.error('Falha ao sincronizar com a planilha (dado ja esta salvo localmente):', erro.message);
   }

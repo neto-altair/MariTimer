@@ -1,7 +1,7 @@
 // Cole este código em Extensões > Apps Script, dentro da sua planilha do Google Sheets.
 // Depois siga as instruções de implantação (deploy) no README do projeto.
 
-const SEGREDO = 'TROQUE_POR_UMA_SENHA_SUA'; // use o mesmo valor no config.json do bot
+const SEGREDO = 'TROQUE_POR_UMA_SENHA_SUA'; // use o mesmo valor no .env do bot (GOOGLE_SHEETS_SECRET)
 
 function doPost(e) {
   const dados = JSON.parse(e.postData.contents);
@@ -17,13 +17,12 @@ function doPost(e) {
     || planilhaAtiva.insertSheet('Registros');
 
   if (aba.getLastRow() === 0) {
-    aba.appendRow(['Data', 'Entrada', 'Saida', 'Horas trabalhadas', 'Esperado', 'Diferenca']);
+    aba.appendRow(['Data', 'Batidas', 'Horas trabalhadas', 'Esperado', 'Diferenca']);
   }
 
   const linhaNova = [
     dados.data,
-    dados.entrada || '',
-    dados.saida || '',
+    dados.batidas || '',
     dados.horasTrabalhadas || '',
     dados.esperado || '',
     dados.diferenca || '',
