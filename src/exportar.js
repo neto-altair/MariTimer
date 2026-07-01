@@ -28,7 +28,7 @@ export function gerarCsv() {
 
   for (const dataKey of datasOrdenadas) {
     const registro = dados[dataKey];
-    const batidas = registro.batidas || [];
+    const batidas = (registro.batidas || []).slice(0, config.batidasPorDia);
 
     const colunasDeHorario = [];
     for (let i = 0; i < config.batidasPorDia; i++) {

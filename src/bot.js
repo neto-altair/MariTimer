@@ -56,6 +56,11 @@ async function registrarBatida(responder, tipo, horaTexto) {
   const registro = storage.getRegistroDoDia(dataKey) || { batidas: [] };
   if (!registro.batidas) registro.batidas = [];
 
+  if (registro.batidas.length >= config.batidasPorDia) {
+    await responder(`Voce ja completou as ${config.batidasPorDia} batidas de hoje. Se precisar corrigir algo, avise quem administra o bot.`);
+    return;
+  }
+
   const ultimaBatida = registro.batidas[registro.batidas.length - 1];
 
   if (tipo === 'entrada' && ultimaBatida && ultimaBatida.tipo === 'entrada') {
