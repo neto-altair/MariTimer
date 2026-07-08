@@ -50,7 +50,7 @@ function textoAjuda() {
     `A jornada tem ${config.batidasPorDia} batidas por dia. Exemplo com almoco: entrada (8h), saida (12h), entrada (13h), saida (17h).`,
     '*saldo* - mostra o saldo acumulado do mes (extra ou em falta)',
     '*exportar* - manda um arquivo CSV com todos os registros, pra abrir no PC',
-    '*editar dia 08/07* - mostra o que esta registrado nesse dia pra voce corrigir e reenviar',
+    '*editar dia 08/07* - mostra o que esta registrado nesse dia (ou avisa que esta vazio) pra voce corrigir/inserir e reenviar',
     '*ajuda* - mostra esta mensagem',
   ].join('\n');
 }
@@ -183,12 +183,17 @@ async function solicitarEdicaoDia(responder, jid, textoData) {
   }
 
   const registro = storage.getRegistroDoDia(jid, dataKey);
+  edicoesPendentes.set(jid, dataKey);
+
   if (!registro || !registro.batidas || registro.batidas.length === 0) {
-    await responder(`Nao encontrei nenhum registro no dia ${formatarData(dataKey)}.`);
+    await responder(
+      `Ainda nao ha nada registrado no dia ${formatarData(dataKey)}.\n\n`
+      + 'Manda a lista completa das batidas desse dia (uma por linha, no formato "tipo HH:MM", comecando por entrada e alternando com saida). Exemplo:\n'
+      + 'entrada 08:00\nsaida 12:00\nentrada 13:00\nsaida 17:00\n\n'
+      + 'Pra cancelar, manda "cancelar".'
+    );
     return;
   }
-
-  edicoesPendentes.set(jid, dataKey);
 
   await responder(
     `No dia ${formatarData(dataKey)} esta registrado isso:\n${formatarBatidas(registro.batidas)}\n\n`
