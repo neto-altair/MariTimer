@@ -14,9 +14,15 @@ Voce manda mensagens pelo WhatsApp e o bot responde:
 - `entrada` ou `entrada 08:00` -> registra a entrada (hora atual ou a informada)
 - `saida` ou `saida 17:00` -> registra a saida e calcula o saldo do dia
 - `saldo` -> mostra o saldo acumulado do mes (positivo = hora extra, negativo = faltando)
+- `exportar` -> manda um CSV com todos os registros
+- `editar dia 08/07` -> mostra o que esta registrado nesse dia pra corrigir e reenviar a mensagem completa com os horarios certos
 - `ajuda` -> lista os comandos
 
 Jornada padrao: 8h por dia, segunda a sexta. Para mudar, edite `config.json`.
+
+Os registros sao separados automaticamente pelo numero de WhatsApp de quem
+manda a mensagem, entao mais de uma pessoa pode usar o mesmo bot sem misturar
+os pontos.
 
 ## Sobre o numero do WhatsApp do bot
 

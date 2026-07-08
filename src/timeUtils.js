@@ -54,3 +54,37 @@ export function formatarHoras(horasDecimal) {
 export function eDiaUtil(date = new Date()) {
   return config.diasUteis.includes(date.getDay());
 }
+
+// aceita "hoje", "ontem" ou datas "DD/MM" (ano atual) / "DD/MM/AAAA"
+// retorna a dataKey "YYYY-MM-DD" ou null se invalido
+export function parseData(texto, agora = new Date()) {
+  const valor = texto.trim().toLowerCase();
+  if (valor === 'hoje') return hojeKey(agora);
+  if (valor === 'ontem') {
+    const ontem = new Date(agora);
+    ontem.setDate(ontem.getDate() - 1);
+    return hojeKey(ontem);
+  }
+
+  const match = valor.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (!match) return null;
+
+  const dia = parseInt(match[1], 10);
+  const mes = parseInt(match[2], 10);
+  let ano = match[3] ? parseInt(match[3], 10) : agora.getFullYear();
+  if (match[3] && match[3].length === 2) ano += 2000;
+
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+
+  const data = new Date(ano, mes - 1, dia);
+  if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) {
+    return null;
+  }
+
+  return hojeKey(data);
+}
+
+export function formatarData(dataKey) {
+  const [ano, mes, dia] = dataKey.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
