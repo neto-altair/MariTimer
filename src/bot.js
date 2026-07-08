@@ -44,14 +44,21 @@ const edicoesPendentes = new Map();
 
 function textoAjuda() {
   return [
-    'Comandos disponiveis:',
-    `*entrada* ou *entrada 08:00* - registra uma entrada (usa o horario atual ou o informado)`,
-    `*saida* ou *saida 12:00* - registra uma saida`,
-    `A jornada tem ${config.batidasPorDia} batidas por dia. Exemplo com almoco: entrada (8h), saida (12h), entrada (13h), saida (17h).`,
-    '*saldo* - mostra o saldo acumulado do mes (extra ou em falta)',
-    '*exportar* - manda um arquivo CSV com todos os registros, pra abrir no PC',
-    '*editar dia 08/07* - mostra o que esta registrado nesse dia (ou avisa que esta vazio) pra voce corrigir/inserir e reenviar',
-    '*ajuda* - mostra esta mensagem',
+    'Os comandos que eu entendo:',
+    '',
+    '*entrada* ou *entrada 08:00* - marca a entrada, agora ou no horario que voce mandar',
+    '',
+    '*saida* ou *saida 12:00* - marca a saida (e ja fecha as contas do dia, se for a ultima)',
+    '',
+    `A jornada tem ${config.batidasPorDia} batidas por dia. Com almoco: entrada (8h), saida (12h), entrada (13h), saida (17h). Sem essas quatro, o calculo nao fecha.`,
+    '',
+    '*saldo* - o extrato do mes: hora extra ou buraco a pagar',
+    '',
+    '*exportar* - manda um CSV com tudo, pra conferir no PC com calma',
+    '',
+    '*editar dia 08/07* - mostra o que esta registrado nesse dia (ou confessa que esta vazio) pra voce corrigir ou preencher',
+    '',
+    '*ajuda* - essa lista aqui, pra quando a memoria falhar',
   ].join('\n');
 }
 
@@ -72,7 +79,7 @@ async function registrarBatida(responder, jid, tipo, horaTexto) {
   const hora = horaTexto ? normalizarHora(horaTexto) : horaAtualHHMM();
 
   if (horaTexto && !hora) {
-    await responder(`Hora invalida. Use o formato HH:MM, por exemplo: ${tipo} 08:00`);
+    await responder(`Essa hora ai nao existe nem no meu relogio. Usa o formato HH:MM, por exemplo: ${tipo} 08:00`);
     return;
   }
 
@@ -80,18 +87,18 @@ async function registrarBatida(responder, jid, tipo, horaTexto) {
   if (!registro.batidas) registro.batidas = [];
 
   if (registro.batidas.length >= config.batidasPorDia) {
-    await responder(`Voce ja completou as ${config.batidasPorDia} batidas de hoje. Se precisar corrigir algo, manda "editar dia hoje".`);
+    await responder(`Voce ja bateu as ${config.batidasPorDia} batidas de hoje, o dia fechou. Errou algum horario? Manda "editar dia hoje" que a gente conserta.`);
     return;
   }
 
   const ultimaBatida = registro.batidas[registro.batidas.length - 1];
 
   if (tipo === 'entrada' && ultimaBatida && ultimaBatida.tipo === 'entrada') {
-    await responder('Voce ja bateu entrada e ainda nao bateu saida. Manda "saida" primeiro.');
+    await responder('Voce ja bateu entrada e ainda nao saiu. Ou trabalha sem parar, ou esqueceu de mandar "saida". Aposto na segunda.');
     return;
   }
   if (tipo === 'saida' && (!ultimaBatida || ultimaBatida.tipo === 'saida')) {
-    await responder('Nao tem entrada em aberto. Manda "entrada" primeiro.');
+    await responder('Nao tem entrada em aberto pra fechar. Comeca mandando "entrada".');
     return;
   }
 
@@ -111,15 +118,15 @@ async function registrarBatida(responder, jid, tipo, horaTexto) {
     const diferenca = registro.horasTrabalhadas - horasEsperadas;
     let resultado;
     if (Math.abs(diferenca) < 0.05) {
-      resultado = 'Bateu exatamente a jornada do dia.';
+      resultado = 'Bateu a jornada certinha. Raro ver tanta pontualidade assim.';
     } else if (diferenca > 0) {
-      resultado = `Hora extra: ${formatarHoras(diferenca)}.`;
+      resultado = `Hora extra: ${formatarHoras(diferenca)}. Fica registrado, mesmo que ninguem te pague por isso.`;
     } else {
-      resultado = `Faltando: ${formatarHoras(Math.abs(diferenca))}.`;
+      resultado = `Faltando: ${formatarHoras(Math.abs(diferenca))}. Recupera quando der.`;
     }
-    mensagem += `\nTotal trabalhado hoje: ${formatarHoras(registro.horasTrabalhadas)}.\n${resultado}`;
+    mensagem += `\n\nTotal trabalhado hoje: ${formatarHoras(registro.horasTrabalhadas)}.\n${resultado}`;
   } else if (par) {
-    mensagem += '\nPausa registrada. Manda "entrada" quando voltar.';
+    mensagem += '\n\nPausa registrada. Aproveita, so nao esquece de mandar "entrada" quando voltar.';
   }
 
   await responder(mensagem);
@@ -146,15 +153,15 @@ async function mostrarSaldo(responder, jid) {
   }
 
   if (diasContabilizados === 0) {
-    await responder('Ainda nao ha dias fechados (com todas as batidas do dia) registrados este mes.');
+    await responder('Ainda nao ha dias fechados este mes (com todas as batidas completas). Volta aqui quando tiver o que contar.');
     return;
   }
 
   const status = saldoTotal >= 0
-    ? `Saldo positivo de ${formatarHoras(saldoTotal)}.`
-    : `Saldo negativo (faltando) de ${formatarHoras(Math.abs(saldoTotal))}.`;
+    ? `Saldo positivo de ${formatarHoras(saldoTotal)}. Hora extra acumulando, use com sabedoria.`
+    : `Saldo negativo (faltando) de ${formatarHoras(Math.abs(saldoTotal))}. Nada que umas horas extras nao resolvam.`;
 
-  await responder(`Saldo do mes (${diasContabilizados} dia(s) fechados):\n${status}`);
+  await responder(`Extrato do mes (${diasContabilizados} dia(s) fechados):\n\n${status}`);
 }
 
 async function exportarCsv(sock, jid) {
@@ -172,13 +179,13 @@ async function exportarCsv(sock, jid) {
 
 async function solicitarEdicaoDia(responder, jid, textoData) {
   if (!textoData) {
-    await responder('Informe o dia. Exemplo: editar dia 08/07 ou editar dia hoje.');
+    await responder('Vou precisar saber qual dia. Exemplo: editar dia 08/07 ou editar dia hoje.');
     return;
   }
 
   const dataKey = parseData(textoData);
   if (!dataKey) {
-    await responder('Data invalida. Use o formato DD/MM ou DD/MM/AAAA, por exemplo: editar dia 08/07.');
+    await responder('Essa data nao existe no calendario. Usa o formato DD/MM ou DD/MM/AAAA, por exemplo: editar dia 08/07.');
     return;
   }
 
@@ -187,8 +194,8 @@ async function solicitarEdicaoDia(responder, jid, textoData) {
 
   if (!registro || !registro.batidas || registro.batidas.length === 0) {
     await responder(
-      `Ainda nao ha nada registrado no dia ${formatarData(dataKey)}.\n\n`
-      + 'Manda a lista completa das batidas desse dia (uma por linha, no formato "tipo HH:MM", comecando por entrada e alternando com saida). Exemplo:\n'
+      `Nao ha nada registrado no dia ${formatarData(dataKey)}. Pagina em branco.\n\n`
+      + 'Manda a lista completa das batidas desse dia (uma por linha, no formato "tipo HH:MM", comecando por entrada e alternando com saida). Exemplo:\n\n'
       + 'entrada 08:00\nsaida 12:00\nentrada 13:00\nsaida 17:00\n\n'
       + 'Pra cancelar, manda "cancelar".'
     );
@@ -196,8 +203,8 @@ async function solicitarEdicaoDia(responder, jid, textoData) {
   }
 
   await responder(
-    `No dia ${formatarData(dataKey)} esta registrado isso:\n${formatarBatidas(registro.batidas)}\n\n`
-    + 'Copie essas linhas, corrija os horarios que precisar e me manda de volta a mensagem completa (uma batida por linha, no formato "tipo HH:MM"). Pode adicionar ou remover linhas se mudar a quantidade de batidas do dia.\n'
+    `No dia ${formatarData(dataKey)} esta registrado isso:\n\n${formatarBatidas(registro.batidas)}\n\n`
+    + 'Copie essas linhas, corrija os horarios que precisar e me manda de volta a mensagem completa (uma batida por linha, no formato "tipo HH:MM"). Pode adicionar ou remover linhas se mudar a quantidade de batidas do dia.\n\n'
     + 'Pra cancelar, manda "cancelar".'
   );
 }
@@ -231,13 +238,13 @@ async function processarEdicao(responder, jid, texto) {
   for (let i = 0; i < batidas.length; i++) {
     const esperado = i % 2 === 0 ? 'entrada' : 'saida';
     if (batidas[i].tipo !== esperado) {
-      await responder('As batidas precisam alternar comecando por entrada (entrada, saida, entrada, saida...). Corrija e manda de novo, ou manda "cancelar".');
+      await responder('As batidas precisam alternar comecando por entrada (entrada, saida, entrada, saida...). O tempo so anda numa direcao. Corrija e manda de novo, ou manda "cancelar".');
       return true;
     }
   }
 
   if (batidas.length > config.batidasPorDia) {
-    await responder(`No maximo ${config.batidasPorDia} batidas por dia. Corrija e manda de novo, ou manda "cancelar".`);
+    await responder(`No maximo ${config.batidasPorDia} batidas por dia. Ninguem trabalha 24 horas (espero). Corrija e manda de novo, ou manda "cancelar".`);
     return true;
   }
 
@@ -246,8 +253,8 @@ async function processarEdicao(responder, jid, texto) {
   edicoesPendentes.delete(jid);
 
   await responder(
-    `Registros do dia ${formatarData(dataKey)} atualizados:\n${formatarBatidas(batidas)}\n`
-    + `Total trabalhado: ${formatarHoras(registro.horasTrabalhadas)}.`
+    `Registros do dia ${formatarData(dataKey)} atualizados:\n\n${formatarBatidas(batidas)}\n\n`
+    + `Total trabalhado: ${formatarHoras(registro.horasTrabalhadas)}. Historia reescrita com sucesso.`
   );
   return true;
 }
@@ -323,9 +330,9 @@ async function iniciar() {
       if (comando === 'cancelar') {
         if (edicoesPendentes.has(jid)) {
           edicoesPendentes.delete(jid);
-          await responder('Edicao cancelada.');
+          await responder('Edicao cancelada. Nada mudou, como se nada tivesse acontecido.');
         } else {
-          await responder('Nao ha nenhuma edicao em andamento pra cancelar.');
+          await responder('Nao ha nenhuma edicao rolando pra cancelar. Relaxa.');
         }
       } else if (comando === 'entrada') {
         await registrarBatida(responder, jid, 'entrada', partes[1]);
@@ -342,7 +349,7 @@ async function iniciar() {
       }
     } catch (erro) {
       console.error('Erro ao processar mensagem:', erro);
-      await responder('Deu um erro aqui ao processar isso. Tenta de novo.');
+      await responder('Deu ruim aqui do meu lado processando isso. Tenta de novo, deve ter sido eu, nao voce.');
     }
   });
 }
