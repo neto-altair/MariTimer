@@ -24,6 +24,71 @@ Os registros sao separados automaticamente pelo numero de WhatsApp de quem
 manda a mensagem, entao mais de uma pessoa pode usar o mesmo bot sem misturar
 os pontos.
 
+## Onde os dados ficam salvos
+
+Por padrao, os registros e a sessao do WhatsApp ficam fora da pasta do
+projeto, em `~/.maritimer-dados` (na home de quem roda o bot). Isso e
+proposital: se um dia voce apagar a pasta do projeto pra clonar ou extrair
+uma versao nova por cima, os dados **nao** somem junto, porque nao moram ali.
+
+Se seu bot ja estava rodando com uma versao antiga, que guardava tudo dentro
+de `data/registros.json` e `data/sessao` (dentro da pasta do projeto), a
+primeira vez que rodar o bot atualizado ele migra esses arquivos sozinho para
+o novo lugar — nao precisa fazer nada manualmente.
+
+Quer escolher outro caminho (por exemplo, pra manter compatibilidade com um
+volume ja configurado no Railway em `/app/data`)? Defina a variavel de
+ambiente `MARITIMER_DATA_DIR` antes de rodar o bot:
+
+```
+MARITIMER_DATA_DIR=/app/data node src/bot.js
+```
+
+O bot tambem guarda sozinho uma copia diaria dos registros (ate 14 dias) em
+`~/.maritimer-dados/backups/`, como uma segunda chance caso o arquivo
+principal seja perdido ou corrompido. Mesmo assim, vale rodar `exportar` de
+vez em quando — o CSV chega no seu proprio WhatsApp, o que funciona como mais
+uma copia de seguranca fora do celular.
+
+### Enviar o backup diario pra nuvem (Google Drive, Dropbox, etc.)
+
+Se quiser que o backup de todo dia va sozinho pra uma pasta no Google Drive,
+Dropbox ou qualquer outro servico, defina a variavel de ambiente
+`MARITIMER_BACKUP_CMD` com um comando de linha de comando — o bot roda esse
+comando uma vez por dia (na primeira gravacao do dia), trocando `{arquivo}`
+pelo caminho do backup gerado naquele dia.
+
+A forma mais simples de fazer esse comando funcionar e usando o
+[**rclone**](https://rclone.org/), que ja sabe conversar com Google Drive,
+Dropbox e dezenas de outros servicos sem voce precisar escrever nenhuma
+integracao:
+
+1. Instale o rclone (no Termux: `pkg install rclone`).
+2. Rode `rclone config` e siga o assistente pra criar um "remote" (escolha
+   `drive` pro Google Drive, `dropbox` pra Dropbox, etc.). Ele abre uma
+   pagina de login no navegador uma unica vez pra autorizar.
+3. Defina a variavel de ambiente antes de iniciar o bot, apontando pro
+   remote criado (troque `meudrive` pelo nome que voce deu ao remote):
+
+   ```
+   MARITIMER_BACKUP_CMD="rclone copy {arquivo} meudrive:MariTimer/" node src/bot.js
+   ```
+
+   No Termux:Boot (`~/.termux/boot/start-bot.sh`), adicione essa variavel
+   antes do `npm start`:
+
+   ```sh
+   #!/data/data/com.termux/files/usr/bin/sh
+   termux-wake-lock
+   cd ~/ponto-bot
+   export MARITIMER_BACKUP_CMD="rclone copy {arquivo} meudrive:MariTimer/"
+   npm start
+   ```
+
+Se o comando falhar (sem internet, remote mal configurado, etc.), o bot so
+registra o erro no log e tenta de novo na proxima gravacao — nao trava nem
+atrapalha o registro de ponto.
+
 ## Sobre o numero do WhatsApp do bot
 
 O bot precisa de um numero de WhatsApp proprio (a "conta do bot"), separado
@@ -42,7 +107,8 @@ do numero pessoal de quem vai mandar as mensagens. Para parear:
 
 ## Sincronizar com Google Sheets (validar e ter backup pelo PC)
 
-Os dados continuam salvos localmente no celular (`data/registros.json`), mas
+Os dados continuam salvos localmente no celular (veja a secao "Onde os dados
+ficam salvos" acima), mas
 o bot tambem manda cada registro direto para uma planilha do Google Sheets,
 usando a API oficial do Google (sem passar por Apps Script). Assim voce
 acessa e confere tudo pelo navegador no PC, e como a planilha fica no seu
@@ -107,10 +173,11 @@ abaixo.
 Dois tipos de informacao neste projeto nao podem ir para um repositorio
 publico (nem privado, idealmente):
 
-- **A pasta `data/`**: contem a sessao autenticada do WhatsApp
-  (`data/sessao`). Quem tiver acesso a esses arquivos consegue se passar
+- **A pasta de dados** (`~/.maritimer-dados` por padrao, veja a secao "Onde
+  os dados ficam salvos"): contem a sessao autenticada do WhatsApp
+  (`sessao/`). Quem tiver acesso a esses arquivos consegue se passar
   pelo seu bot no WhatsApp sem precisar escanear QR code de novo. Contém
-  também o `registros.json`, com os horarios.
+  também o `registros.json`, com os horarios, e os backups diarios.
 - **O arquivo `.env`**: contem a senha e a URL da planilha. Quem tiver isso
   consegue escrever dados falsos na sua planilha.
 
@@ -202,9 +269,9 @@ bateria. Para o bot ficar sempre ativo:
   ser atualizado (`npm update`). E uma biblioteca nao oficial.
 - Se o Termux travar ou o celular reiniciar sem o Termux:Boot configurado,
   o bot para ate voce abrir o app e rodar `npm start` de novo.
-- Os dados ficam em `data/registros.json`, dentro da pasta do projeto no
-  proprio celular. Vale fazer backup de vez em quando (copiar esse arquivo
-  para a nuvem ou outro lugar).
+- Os dados ficam em `~/.maritimer-dados`, fora da pasta do projeto (veja a
+  secao "Onde os dados ficam salvos"). O bot ja guarda backups diarios
+  sozinho, mas vale copiar essa pasta pra nuvem de vez em quando tambem.
 
 ## Alternativa: rodar na nuvem (Railway)
 
@@ -217,7 +284,9 @@ o uso continuo exige o plano Hobby (US$5/mes).
 2. No Railway, crie um projeto e escolha "Deploy from GitHub repo". Ele
    detecta o `Dockerfile` automaticamente.
 3. Adicione um **Volume** montado em `/app/data`, para a sessao e os
-   registros nao se perderem a cada deploy.
+   registros nao se perderem a cada deploy, e defina a variavel de ambiente
+   `MARITIMER_DATA_DIR=/app/data` (veja a secao "Onde os dados ficam
+   salvos") pra apontar o bot pra esse volume.
 4. Acompanhe os logs do deployment para escanear o QR code.
 
 ## Personalizar
