@@ -5,6 +5,7 @@ import makeWASocket, {
 } from 'baileys';
 import { Boom } from '@hapi/boom';
 import P from 'pino';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import qrcode from 'qrcode-terminal';
@@ -24,7 +25,19 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PASTA_SESSAO = path.join(__dirname, '..', 'data', 'sessao');
+
+// mesma logica de migracao do storage.js: a sessao autenticada do WhatsApp
+// tambem sai da pasta do projeto, pra sobreviver a atualizacoes do bot.
+const PASTA_SESSAO_ANTIGA = path.join(__dirname, '..', 'data', 'sessao');
+const PASTA_SESSAO = path.join(storage.PASTA_DADOS, 'sessao');
+
+if (!fs.existsSync(storage.PASTA_DADOS)) {
+  fs.mkdirSync(storage.PASTA_DADOS, { recursive: true });
+}
+if (!fs.existsSync(PASTA_SESSAO) && fs.existsSync(PASTA_SESSAO_ANTIGA)) {
+  fs.cpSync(PASTA_SESSAO_ANTIGA, PASTA_SESSAO, { recursive: true });
+  console.log(`Sessao do WhatsApp migrada de ${PASTA_SESSAO_ANTIGA} para ${PASTA_SESSAO}.`);
+}
 
 // dias aguardando confirmacao de edicao: jid -> dataKey
 const edicoesPendentes = new Map();
