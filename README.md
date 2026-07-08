@@ -50,6 +50,45 @@ principal seja perdido ou corrompido. Mesmo assim, vale rodar `exportar` de
 vez em quando — o CSV chega no seu proprio WhatsApp, o que funciona como mais
 uma copia de seguranca fora do celular.
 
+### Enviar o backup diario pra nuvem (Google Drive, Dropbox, etc.)
+
+Se quiser que o backup de todo dia va sozinho pra uma pasta no Google Drive,
+Dropbox ou qualquer outro servico, defina a variavel de ambiente
+`MARITIMER_BACKUP_CMD` com um comando de linha de comando — o bot roda esse
+comando uma vez por dia (na primeira gravacao do dia), trocando `{arquivo}`
+pelo caminho do backup gerado naquele dia.
+
+A forma mais simples de fazer esse comando funcionar e usando o
+[**rclone**](https://rclone.org/), que ja sabe conversar com Google Drive,
+Dropbox e dezenas de outros servicos sem voce precisar escrever nenhuma
+integracao:
+
+1. Instale o rclone (no Termux: `pkg install rclone`).
+2. Rode `rclone config` e siga o assistente pra criar um "remote" (escolha
+   `drive` pro Google Drive, `dropbox` pra Dropbox, etc.). Ele abre uma
+   pagina de login no navegador uma unica vez pra autorizar.
+3. Defina a variavel de ambiente antes de iniciar o bot, apontando pro
+   remote criado (troque `meudrive` pelo nome que voce deu ao remote):
+
+   ```
+   MARITIMER_BACKUP_CMD="rclone copy {arquivo} meudrive:MariTimer/" node src/bot.js
+   ```
+
+   No Termux:Boot (`~/.termux/boot/start-bot.sh`), adicione essa variavel
+   antes do `npm start`:
+
+   ```sh
+   #!/data/data/com.termux/files/usr/bin/sh
+   termux-wake-lock
+   cd ~/ponto-bot
+   export MARITIMER_BACKUP_CMD="rclone copy {arquivo} meudrive:MariTimer/"
+   npm start
+   ```
+
+Se o comando falhar (sem internet, remote mal configurado, etc.), o bot so
+registra o erro no log e tenta de novo na proxima gravacao — nao trava nem
+atrapalha o registro de ponto.
+
 ## Sobre o numero do WhatsApp do bot
 
 O bot precisa de um numero de WhatsApp proprio (a "conta do bot"), separado

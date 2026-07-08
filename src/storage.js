@@ -1,3 +1,4 @@
+import { exec } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -21,6 +22,7 @@ const DATA_FILE = path.join(PASTA_DADOS, 'registros.json');
 const ARQUIVO_ANTIGO = path.join(PASTA_ANTIGA, 'registros.json');
 const PASTA_BACKUPS = path.join(PASTA_DADOS, 'backups');
 const MAX_BACKUPS = 14;
+const MARCADOR_UPLOAD = path.join(PASTA_DADOS, '.ultimo-upload');
 
 // Copia o arquivo antigo (se existir e o novo ainda nao existir) uma unica
 // vez, pra quem ja tinha o bot rodando nao perder o historico com essa troca.
@@ -68,19 +70,46 @@ function fazerBackup(dados) {
     if (!fs.existsSync(PASTA_BACKUPS)) fs.mkdirSync(PASTA_BACKUPS, { recursive: true });
 
     const hoje = new Date().toISOString().slice(0, 10);
-    fs.writeFileSync(
-      path.join(PASTA_BACKUPS, `registros-${hoje}.json`),
-      JSON.stringify(dados, null, 2)
-    );
+    const arquivoDeHoje = path.join(PASTA_BACKUPS, `registros-${hoje}.json`);
+    fs.writeFileSync(arquivoDeHoje, JSON.stringify(dados, null, 2));
 
     const backups = fs.readdirSync(PASTA_BACKUPS).filter((f) => f.startsWith('registros-')).sort();
     const excedentes = backups.slice(0, Math.max(0, backups.length - MAX_BACKUPS));
     for (const arquivo of excedentes) {
       fs.unlinkSync(path.join(PASTA_BACKUPS, arquivo));
     }
+
+    tentarUploadDiario(arquivoDeHoje, hoje);
   } catch (erro) {
     console.error('Falha ao gerar backup dos registros:', erro);
   }
+}
+
+// Se MARITIMER_BACKUP_CMD estiver configurado, roda esse comando uma vez por
+// dia (troque {arquivo} pelo caminho do backup do dia), pra mandar uma copia
+// pra algum servico de nuvem (Google Drive, Dropbox, etc.) via rclone ou
+// qualquer outra ferramenta de linha de comando. Veja o README.
+function tentarUploadDiario(arquivoDeHoje, hoje) {
+  const comando = process.env.MARITIMER_BACKUP_CMD;
+  if (!comando) return;
+
+  let ultimoUpload = null;
+  try {
+    ultimoUpload = fs.readFileSync(MARCADOR_UPLOAD, 'utf-8').trim();
+  } catch {
+    ultimoUpload = null;
+  }
+  if (ultimoUpload === hoje) return;
+
+  const comandoFinal = comando.split('{arquivo}').join(arquivoDeHoje);
+  exec(comandoFinal, (erro, _stdout, stderr) => {
+    if (erro) {
+      console.error('Falha ao rodar o upload diario de backup:', stderr || erro.message);
+      return;
+    }
+    fs.writeFileSync(MARCADOR_UPLOAD, hoje);
+    console.log('Backup diario enviado com sucesso pra nuvem.');
+  });
 }
 
 // Estrutura salva: { [jid]: { "YYYY-MM-DD": { batidas: [...], horasTrabalhadas } } }
