@@ -18,9 +18,10 @@ function nomesDasColunasDeBatida() {
 }
 
 // Gera o conteudo de um CSV (separado por ; e numeros com virgula, no
-// padrao que o Excel em portugues abre corretamente sem precisar importar).
-export function gerarCsv() {
-  const dados = storage.carregarTudo();
+// padrao que o Excel em portugues abre corretamente sem precisar importar)
+// apenas com os registros do usuario (jid) informado.
+export function gerarCsv(jid) {
+  const dados = storage.getRegistrosDoUsuario(jid);
   const datasOrdenadas = Object.keys(dados).sort();
 
   const cabecalho = ['Data', ...nomesDasColunasDeBatida(), 'HorasTrabalhadas', 'Esperado', 'Diferenca'];
